@@ -17,6 +17,14 @@ Security Group: All traffic enabled for now.
 Create DockerHub account and create a repository inside it.
 Fork GIThub project : https://github.com/maheshkharwadkar/sample-k8s.git and make changes in my-calc-deploymnet.yaml (image should be "yourid/repo-name") and commit it.
 
+Code snippet:
+ spec:
+      containers:
+      - name: my-calc
+        image: <xyz your id>/my-calc
+        ports:
+        - containerPort: 5000
+
 -------------------------------------------------------------------------------------------------------------------------------------
 
 run below commands on Kubernetes-Master
