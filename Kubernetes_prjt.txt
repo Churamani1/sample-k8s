@@ -1,0 +1,179 @@
+Create CI/CD pipeline with Jenkins and Kubernettes cluster
+
+What we are doing?
+Create Kubernetes Cluster on different machines, one will be master another will be client.
+Jenkins machine will use kubectl to make changes on Kubernetes cluster which is on other machine.
+Jenkins will use Docker build and publish plugin to build the Dockerfile present in GitHub and push the image created to Dockerhub repository. 
+It will also apply the the yml file and create pod for us which can be seen in Kubernetes-master server. (RUN kubectl get pods on kubernetes-master AFTER DOING EVERYTHING MENTIONED BELOW)
+
+
+3 machines Needed:
+1.Kubernetes-Master
+2.Kubernetes-Client
+2.Jenkins
+
+Security Group: All traffic enabled for now.
+
+Create DockerHub account and create a repository inside it.
+Fork GIThub project : https://github.com/maheshkharwadkar/sample-k8s.git and make changes in my-calc-deploymnet.yaml (image should be "yourid/repo-name") and commit it.
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+run below commands on Kubernetes-Master
+
+1.  ---------Deploying Docker
+	sudo apt-get update
+	sudo apt-get install apt-transport-https ca-certificates curl software-properties-common
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+	sudo apt-key fingerprint 0EBFCD88
+	sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+	sudo apt-get update
+	sudo apt-get install docker-ce
+
+
+2.---------Deploying Kubectl
+        sudo snap install kubectl --classic
+
+3.----Deploying Kubelet and Kubeadm
+        apt-get update && apt-get install -y apt-transport-https
+	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+        vi /etc/apt/sources.list.d/kubernetes.list
+        deb http://apt.kubernetes.io/ kubernetes-xenial main
+        <EOF here , just one line to add to list>
+
+        apt-get update
+        apt-get install -y kubelet kubeadm
+
+4.----------------Using kubeadm to Create a Cluster
+        kubeadm init
+	-----------output of the above command last line-----
+	kubeadm join xxx.xx.x.xx:6443 --token y6otsr.d7xdmbsywzpx9yn0 --discovery-token-ca-cert-hash sha256:00e1264997a5ec662
+	---execute it on the second machine
+5.----Configuring kubelet
+        mkdir -p $HOME/.kube
+        sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+NOTE: Copy Config File on your local machine using WINSCP, we will copy it to Jenkins machine later.
+
+6.  kubectl taint nodes --all node-role.kubernetes.io/master-
+7.  kubectl apply -f https://git.io/weave-kube-1.6
+8.  watch kubectl get pods --all-namespaces
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------
+
+Run Following commands on Kubernetes-Client
+
+
+1.  ---------Deploying Docker
+        sudo apt-get update
+	sudo apt-get install apt-transport-https ca-certificates curl software-properties-common
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+	sudo apt-key fingerprint 0EBFCD88
+	sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+	sudo apt-get update
+	sudo apt-get install docker-ce
+
+
+2.---------Deploying Kubectl
+        sudo snap install kubectl --classic
+
+3.----Deploying Kubelet and Kubeadm
+        apt-get update && apt-get install -y apt-transport-https
+
+        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+        vi /etc/apt/sources.list.d/kubernetes.list
+        deb http://apt.kubernetes.io/ kubernetes-xenial main
+        
+
+        apt-get update
+        apt-get install -y kubelet kubeadm
+
+	kubeadm join xxx.xx.x.xx:6443 --token y6otsr.d7xdmbsywzpx9yn0 --discovery-token-ca-cert-hash sha256:00e1264997a5ec662
+	---execute it
+
+You will see message like
+[discovery] Successfully established connection with API Server " xxx.xx.x.xx:6443"
+This node has joined the cluster:
+
+-----------------------------------------------------------------------------------------------------------------------------------------
+
+Run Following commands on Jenkins
+
+1.  ---------Deploying Docker
+        sudo apt-get update
+	sudo apt-get install apt-transport-https ca-certificates curl software-properties-common
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+	sudo apt-key fingerprint 0EBFCD88
+	sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+	sudo apt-get update
+	sudo apt-get install docker-ce
+
+2.---------Deploying Kubectl
+        sudo snap install kubectl --classic
+
+3. ---------Install Jenkins
+cd /opt
+sudo apt update -y
+sudo apt-get update -y
+sudo apt-get install openjdk-8-jdk
+wget -q -O - http://pkg.jenkins-ci.org/debian/jenkins-ci.org.key | sudo apt-key add -
+echo "deb http://pkg.jenkins-ci.org/debian binary/" | sudo tee -a /etc/apt/sources.list.d/jenkins.list
+sudo apt-get update
+sudo apt-get install jenkins
+service jenkins status
+
+Install JAVA:
+sudo apt-get install openjdk-8-jdk
+export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/jre
+echo $JAVA_HOME
+------
+Make jenkins as root user (visudo)
+	type visudo
+	add below line and save
+	jenkins ALL=(ALL) NOPASSWD: ALL
+-----
+COPY  Admin.conf file from Kubernetes-master to jenkins
+
+mkdir -p /var/lib/jenkins/.kube
+        sudo cp -i /etc/kubernetes/admin.conf /var/lib/jenkins/.kube/config
+        sudo chown $(id -u):$(id -g) /var/lib/jenkins/.kube/config
+
+------
+Run this also on jenkins machine
+ 
+	sudo usermod -a -G docker jenkins
+	sudo chmod 664 /var/run/docker.sock
+	service jenkins restart
+
+Make sure to restart Jenkins after above configuration.
+------
+
+4. ------------Go to Jenkins Console, 
+define Global Tool configuration on Manage jenkins, provide JAVA_HOME and MAVEN_HOME values which you have exported above.
+
+JDK:
+NAME: JAVA_HOME
+Path : /usr/lib/jvm/java-8-openjdk-amd64/jre
+
+DOCKER:
+NAME: DOCKER_HOME
+Path: /var/lib/docker
+
+------
+Install  Cloudbees Docker Build and Publish Plugin
+
+Configure Freestyle jenkins Job , 2 jpeg file present in GIThub account to verify job configuration.
+
+----DONE----------------------------------------
+
+Verification Steps:
+Check if you Docker Repo has new entry or not after running the job.
+On Kubernetes-Master , Check output of : kubectl get pods , in this case it should give you 3 containers created (as we gave 3 replicas in our code)
+
+-------------------------------------------------------------
+
+
